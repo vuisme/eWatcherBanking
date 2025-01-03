@@ -2,3 +2,4 @@ requests
 pylint
 flask
 redis
+napas_qr
