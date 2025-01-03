@@ -3,3 +3,4 @@ pylint
 flask
 redis
 napas-qr-python
+segno 
