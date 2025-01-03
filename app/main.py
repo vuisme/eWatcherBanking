@@ -129,12 +129,12 @@ def fetch_last_unseen_email():
         for sender in CAKE_EMAIL_SENDERS:
             _, email_ids = mail.search(None, f'(UNSEEN FROM "{sender}")')
             email_ids = email_ids[0].split()
-            if email_ids:
-                email_id = email_ids[-1]
+            for email_id in email_ids:
                 _, msg_data = mail.fetch(email_id, "(RFC822)")
                 msg = email.message_from_bytes(msg_data[0][1])
                 logger.info(f'Phát hiện email mới từ {sender}')
-
+                # Đánh dấu email là đã đọc (tuỳ chọn)
+                mail.store(email_id, '+FLAGS', '\Seen')
                 if msg.is_multipart():
                     for part in msg.walk():
                         content_type = part.get_content_type()
