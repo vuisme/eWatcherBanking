@@ -103,13 +103,13 @@ def process_cake_email(body):
             if match:
                 phone_number = match.group(1)
                 logger.info(f"Phát hiện giao dịch chuyển tiền đi: NT{phone_number}, số tiền: {amount_decreased}")
-                #confirm_topup(phone_number, amount_decreased, description, transaction_time)
+                confirm_topup(phone_number, amount_decreased, description, transaction_time)
         if amount_increased:  # Kiểm tra nếu amount_decreased khác None và khác 0 (nếu bạn khởi tạo là 0)
             logging.info("amount_increased")
             if match:
                 phone_number = match.group(1)
                 logger.info(f"Phát hiện giao dịch chuyển tiền đến: NT{phone_number}, số tiền: {amount_increased}")
-                #confirm_topup(phone_number, amount_decreased, description, transaction_time)
+                confirm_topup(phone_number, amount_increased, description, transaction_time)
         # 2. Xác thực giao dịch chuyển tiền với mã tạm thời
         transaction_code_data = redis_client.hgetall(description)
         if transaction_code_data:
@@ -162,8 +162,8 @@ def confirm_topup(phone_number, amount, description, transaction_time):
         'transaction_time': transaction_time
     }
     try:
-        response = requests.post(f"{APP_URL}/confirm_topup", json=payload, headers=headers)
-        response.raise_for_status()
+        #response = requests.post(f"{APP_URL}/confirm_topup", json=payload, headers=headers)
+        #response.raise_for_status()
         logger.info(f"Đã gửi request xác nhận nạp tiền cho số điện thoại {phone_number}, số tiền {amount}")
 
         # Lưu lịch sử giao dịch vào Redis
@@ -174,7 +174,8 @@ def confirm_topup(phone_number, amount, description, transaction_time):
             'amount': amount,
             'description': description,
             'transaction_time': transaction_time,
-            'response': response.json()
+            #'response': response.json()
+            'response': done
         }
         redis_client.rpush(TRANSACTION_HISTORY_KEY, json.dumps(transaction_data))
         logger.info(f"Đã lưu lịch sử giao dịch nạp tiền: {transaction_data}")
