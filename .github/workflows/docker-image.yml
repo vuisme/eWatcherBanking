@@ -24,7 +24,7 @@ jobs:
         platforms: linux/amd64,linux/arm64
         push: true
         no-cache: true
-        tags: cpanel10x/eBankWatcher:1.0
+        tags: cpanel10x/ebankwatcher:1.0
 
       
     # - name: Update deployment
