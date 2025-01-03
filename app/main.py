@@ -307,8 +307,7 @@ def generate_qr_code():
         qr_pay = QRPay(bank_code, account_number, purpose_of_transaction=purpose)
         code = qr_pay.code
         # Tạo mã QR code
-        img = qr_pay.generate_qr_pay()
-
+        img = qr_pay.generate_qr_code_image()
         # Trả về ảnh QR
         return img
 
