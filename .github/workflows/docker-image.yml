@@ -1,0 +1,37 @@
+name: CI/CD
+
+on: workflow_dispatch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+
+    - name: Log into Docker Hub
+      run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+      
+    - name: Build Docker image
+      uses: docker/build-push-action@v2
+      with:
+        context: .
+        file: ./Dockerfile
+        platforms: linux/amd64,linux/arm64
+        push: true
+        no-cache: true
+        tags: cpanel10x/eBankWatcher:1.0
+
+      
+    # - name: Update deployment
+    #   uses: appleboy/kubernetes-action@v0.0.1
+    #   with:
+    #     server: ${{ secrets.K8S_SERVER }}
+    #     ca_cert: ${{ secrets.K8S_CA_CERT }}
+    #     token: ${{ secrets.K8S_TOKEN }}
+    #     namespace: ittools
+    #     templates: deployment.yaml
