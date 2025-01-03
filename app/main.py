@@ -175,7 +175,7 @@ def confirm_topup(phone_number, amount, description, transaction_time):
             'description': description,
             'transaction_time': transaction_time,
             #'response': response.json()
-            'response': done
+            'response': 'done'
         }
         redis_client.rpush(TRANSACTION_HISTORY_KEY, json.dumps(transaction_data))
         logger.info(f"Đã lưu lịch sử giao dịch nạp tiền: {transaction_data}")
