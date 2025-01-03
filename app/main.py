@@ -6,7 +6,10 @@ import os
 import requests
 from datetime import datetime
 import logging
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
+from io import BytesIO
+from qr_pay import QRPay
+import qrcode
 from threading import Thread
 import redis
 import random
@@ -290,6 +293,35 @@ def get_transaction_history():
         logger.error(f"Lỗi khi lấy lịch sử giao dịch: {e}")
         return jsonify({'message': 'Error retrieving transaction history', 'error': str(e)}), 500
 
+@app.route('/qrpay', methods=['POST'])
+def generate_qr_code():
+    """API endpoint để tạo mã QR."""
+    try:
+        data = request.get_json()
+        bank_code = data.get('bank_code', '970454')
+        account_number = data.get('account_number','0977091190')
+        purpose = data.get('purpose', 'NT0977091190')
+
+        if not bank_code or not account_number:
+            return jsonify({'message': 'Missing bank_code or account_number'}), 400
+
+        qr_pay = QRPay(bank_code, account_number, purpose_of_transaction=purpose)
+        code = qr_pay.code
+
+        # Tạo mã QR code
+        img = qrcode.make(code)
+
+        # Lưu ảnh vào bộ nhớ
+        img_io = BytesIO()
+        img.save(img_io, 'PNG')
+        img_io.seek(0)
+
+        # Trả về ảnh QR
+        return send_file(img_io, mimetype='image/png'), 200
+
+    except Exception as e:
+        logger.error(f"Lỗi khi tạo mã QR: {e}")
+        return jsonify({'message': 'Error generating QR code', 'error': str(e)}), 500
 def email_processing_thread():
     """Hàm chạy trong thread riêng để xử lý email."""
     logger.info('Bắt đầu luồng xử lý email')
