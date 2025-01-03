@@ -47,7 +47,9 @@ app = Flask(__name__)
 def extract_transaction_details(body):
     """Trích xuất chi tiết giao dịch từ nội dung email."""
     transaction_details = {}
-
+    # Khởi tạo amount_decreased và amount_increased với giá trị mặc định
+    transaction_details["amount_increased"] = None
+    transaction_details["amount_decreased"] = None
     # Trích xuất số tiền tăng
     amount_increased_match = re.search(r"vừa tăng ([\d,.]+) VND", body)
     if amount_increased_match:
@@ -91,17 +93,21 @@ def process_cake_email(body):
         description = transaction_details.get('description', '')
         amount = transaction_details.get('amount_decreased', '0')
         transaction_time = transaction_details.get("time", 'Không rõ')
+        amount_increased = transaction_details.get('amount_increased')
+        amount_decreased = transaction_details.get('amount_decreased')
         # 1. Xác thực giao dịch chuyển tiền với nội dung "NTsố điện thoại"
-        if 'vừa tăng' in body:  # Chỉ xử lý giao dịch tăng tiền (số tiền tăng)
-            logger.info("Vừa tăng")
+        if amount_decreased:  # Kiểm tra nếu amount_decreased khác None và khác 0 (nếu bạn khởi tạo là 0)
             match = re.match(r"^NT(\d{10})$", description)
-            logger.info(match)
             if match:
                 phone_number = match.group(1)
-
-                logger.info(f"Phát hiện giao dịch chuyển tiền: NT{phone_number}, số tiền: {amount}")
-                confirm_topup(phone_number, amount, description, transaction_time)
-
+                logger.info(f"Phát hiện giao dịch chuyển tiền đi: NT{phone_number}, số tiền: {amount_decreased}")
+                #confirm_topup(phone_number, amount_decreased, description, transaction_time)
+        if amount_increased:  # Kiểm tra nếu amount_decreased khác None và khác 0 (nếu bạn khởi tạo là 0)
+            match = re.match(r"^NT(\d{10})$", description)
+            if match:
+                phone_number = match.group(1)
+                logger.info(f"Phát hiện giao dịch chuyển tiền đến: NT{phone_number}, số tiền: {amount_increased}")
+                #confirm_topup(phone_number, amount_decreased, description, transaction_time)
         # 2. Xác thực giao dịch chuyển tiền với mã tạm thời
         transaction_code_data = redis_client.hgetall(description)
         if transaction_code_data:
