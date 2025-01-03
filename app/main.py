@@ -95,19 +95,17 @@ def process_cake_email(body):
         transaction_time = transaction_details.get("time", 'Không rõ')
         amount_increased = transaction_details.get('amount_increased')
         amount_decreased = transaction_details.get('amount_decreased')
+        match = re.match(r"^NT(\d{10})$", description)
+        logging.info(match)
         # 1. Xác thực giao dịch chuyển tiền với nội dung "NTsố điện thoại"
         if amount_decreased:  # Kiểm tra nếu amount_decreased khác None và khác 0 (nếu bạn khởi tạo là 0)
-            match = re.match(r"^NT(\d{10})$", description)
-            logging.info("match")
-            logging.info(match)
+            logging.info("amount_decreased")
             if match:
                 phone_number = match.group(1)
                 logger.info(f"Phát hiện giao dịch chuyển tiền đi: NT{phone_number}, số tiền: {amount_decreased}")
                 #confirm_topup(phone_number, amount_decreased, description, transaction_time)
         if amount_increased:  # Kiểm tra nếu amount_decreased khác None và khác 0 (nếu bạn khởi tạo là 0)
-            match = re.match(r"^NT(\d{10})$", description)
-            logging.info("match")
-            logging.info(match)
+            logging.info("amount_increased")
             if match:
                 phone_number = match.group(1)
                 logger.info(f"Phát hiện giao dịch chuyển tiền đến: NT{phone_number}, số tiền: {amount_increased}")
