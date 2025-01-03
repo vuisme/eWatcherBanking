@@ -98,6 +98,8 @@ def process_cake_email(body):
         # 1. Xác thực giao dịch chuyển tiền với nội dung "NTsố điện thoại"
         if amount_decreased:  # Kiểm tra nếu amount_decreased khác None và khác 0 (nếu bạn khởi tạo là 0)
             match = re.match(r"^NT(\d{10})$", description)
+            logging.info("match")
+            logging.info(match)
             if match:
                 phone_number = match.group(1)
                 logger.info(f"Phát hiện giao dịch chuyển tiền đi: NT{phone_number}, số tiền: {amount_decreased}")
