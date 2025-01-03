@@ -4,6 +4,8 @@ import re
 import time
 import os
 import requests
+import segno
+import io
 from datetime import datetime
 import logging
 from flask import Flask, request, jsonify, send_file
@@ -14,6 +16,7 @@ import redis
 import random
 import string
 import json
+from segno import helpers
 
 # Cấu hình logging
 logging.basicConfig(level=logging.INFO,
@@ -309,7 +312,12 @@ def generate_qr_code():
         # Tạo mã QR code
         img = qr_pay.generate_qr_code_image(code)
         # Trả về ảnh QR
-        return img
+        img_io = io.BytesIO()
+        img.save(img_io, kind='PNG')
+        img_io.seek(0)
+
+        # Trả về ảnh QR sử dụng send_file
+        return send_file(img_io, mimetype='image/png')
 
     except Exception as e:
         logger.error(f"Lỗi khi tạo mã QR: {e}")
