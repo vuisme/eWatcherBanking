@@ -93,7 +93,9 @@ def process_cake_email(body):
         transaction_time = transaction_details.get("time", 'Không rõ')
         # 1. Xác thực giao dịch chuyển tiền với nội dung "NTsố điện thoại"
         if 'vừa tăng' in body:  # Chỉ xử lý giao dịch tăng tiền (số tiền tăng)
+            logger.info("Vừa tăng")
             match = re.match(r"^NT(\d{10})$", description)
+            logger.info(match)
             if match:
                 phone_number = match.group(1)
 
