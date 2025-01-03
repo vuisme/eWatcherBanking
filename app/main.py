@@ -300,7 +300,7 @@ def generate_qr_code():
     """API endpoint để tạo mã QR."""
     try:
         data = request.get_json()
-        bank_code = data.get('bank_code', '970454')
+        bank_code = data.get('bank_code', '963388')
         account_number = data.get('account_number','0977091190')
         purpose = data.get('purpose', 'NT0977091190')
 
