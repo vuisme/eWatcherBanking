@@ -8,8 +8,7 @@ from datetime import datetime
 import logging
 from flask import Flask, request, jsonify, send_file
 from io import BytesIO
-from napas-qr-python import QRPay
-import qrcode
+from qr_pay import QRPay
 from threading import Thread
 import redis
 import random
