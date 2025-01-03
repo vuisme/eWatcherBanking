@@ -306,17 +306,11 @@ def generate_qr_code():
 
         qr_pay = QRPay(bank_code, account_number, purpose_of_transaction=purpose)
         code = qr_pay.code
-
         # Tạo mã QR code
-        img = qrcode.make(code)
-
-        # Lưu ảnh vào bộ nhớ
-        img_io = BytesIO()
-        img.save(img_io, 'PNG')
-        img_io.seek(0)
+        img = qr_pay.generate_qr_pay()
 
         # Trả về ảnh QR
-        return send_file(img_io, mimetype='image/png'), 200
+        return img
 
     except Exception as e:
         logger.error(f"Lỗi khi tạo mã QR: {e}")
