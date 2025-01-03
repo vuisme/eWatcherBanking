@@ -86,13 +86,13 @@ def extract_transaction_details(body):
 def process_cake_email(body):
     """Xử lý email từ Cake và gửi thông báo tới ứng dụng nếu cần."""
     transaction_details = extract_transaction_details(body)
-
+    logging.info(transaction_details)
     if transaction_details:
         description = transaction_details.get('description', '')
         amount = transaction_details.get('amount_decreased', '0')
         transaction_time = transaction_details.get("time", 'Không rõ')
         # 1. Xác thực giao dịch chuyển tiền với nội dung "NTsố điện thoại"
-        if 'vừa giảm' in body:  # Chỉ xử lý giao dịch chuyển tiền (số tiền giảm)
+        if 'vừa tăng' in body:  # Chỉ xử lý giao dịch tăng tiền (số tiền tăng)
             match = re.match(r"^NT(\d{10})$", description)
             if match:
                 phone_number = match.group(1)
