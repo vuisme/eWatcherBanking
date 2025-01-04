@@ -184,7 +184,8 @@ def confirm_topup(phone_number, amount, description, transaction_time, transacti
             'description': description,
             'transaction_time': transaction_time,
             'transaction_type': transaction_type,
-            'response': response.json()
+            # 'response': response.json()
+            'response': 'confirmed'
         }
         redis_client.rpush(TRANSACTION_HISTORY_KEY, json.dumps(transaction_data))
         logger.info(f"Đã lưu lịch sử giao dịch nạp tiền: {transaction_data}")
@@ -227,7 +228,8 @@ def confirm_transaction(transaction_id, amount, description, transaction_time):
             'amount': amount,
             'description': description,
             'transaction_time': transaction_time,
-            'response': response.json()
+            # 'response': response.json()
+            'response': 'confirmed'
         }
         redis_client.rpush(TRANSACTION_HISTORY_KEY, json.dumps(transaction_data))
         logger.info(f"Đã lưu lịch sử giao dịch: {transaction_data}")
@@ -250,7 +252,7 @@ def generate_qr_image_from_string(qr_content):
     """Tạo ảnh QR từ chuỗi nội dung."""
     try:
         img_io = BytesIO()
-        qr_content.save(img_io, kind='PNG', scale=100)
+        qr_content.save(img_io, kind='PNG', scale=30)
         img_io.seek(0)
         return img_io
     except Exception as e:
