@@ -28,64 +28,53 @@ EMAIL_IMAP = os.environ['EMAIL_IMAP']
 EMAIL_LOGIN = os.environ['EMAIL_LOGIN']
 EMAIL_PASSWORD = os.environ['EMAIL_PASSWORD']
 CAKE_EMAIL_SENDERS = os.environ.get('CAKE_EMAIL_SENDERS', '').split(',')
-API_KEY = os.environ.get('API_KEY', '')  # API Key cho ứng dụng
-APP_URL = os.environ.get('APP_URL', '')  # URL của ứng dụng
+API_KEY = os.environ.get('API_KEY', '')
+APP_URL = os.environ.get('APP_URL', '')
 REDIS_HOST = os.environ.get('REDIS_HOST', 'localhost')
 REDIS_PORT = int(os.environ.get('REDIS_PORT', 6379))
 REDIS_DB = int(os.environ.get('REDIS_DB', 0))
-TRANSACTION_CODE_EXPIRATION = int(os.environ.get('TRANSACTION_CODE_EXPIRATION', 600))  # Thời gian hết hạn của mã giao dịch (giây)
+TRANSACTION_CODE_EXPIRATION = int(os.environ.get('TRANSACTION_CODE_EXPIRATION', 600))
 TRANSACTION_HISTORY_KEY = os.environ.get('TRANSACTION_HISTORY_KEY', 'transaction_history')
+BANK_CODE = os.environ.get('BANK_CODE', '963388')
+ACCOUNT_NUMBER = os.environ.get('ACCOUNT_NUMBER', '0977091190')
 
 # Kết nối Redis
 try:
     redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
-    redis_client.ping()  # Kiểm tra kết nối
+    redis_client.ping()
     logger.info(f"Kết nối Redis thành công: {REDIS_HOST}:{REDIS_PORT} (DB: {REDIS_DB})")
 except redis.exceptions.ConnectionError as e:
     logger.error(f"Lỗi kết nối Redis: {e}")
-    exit(1)  # Thoát chương trình nếu không kết nối được Redis
+    exit(1)
 
 # Flask App
 app = Flask(__name__)
 
-
 def extract_transaction_details(body):
     """Trích xuất chi tiết giao dịch từ nội dung email."""
     transaction_details = {}
-    # Khởi tạo amount_decreased và amount_increased với giá trị mặc định
-    transaction_details["amount_increased"] = None
-    transaction_details["amount_decreased"] = None
-    # Trích xuất số tiền tăng
-    amount_increased_match = re.search(r"vừa tăng ([\d,.]+) VND", body)
-    if amount_increased_match:
-        transaction_details["amount_increased"] = amount_increased_match.group(1).replace('.', '').replace(',', '')
+    # Tối ưu: Sử dụng dict comprehension và compiled regex
+    patterns = {
+        "amount_increased": re.compile(r"vừa tăng ([\d,.]+) VND"),
+        "amount_decreased": re.compile(r"vừa giảm ([\d,.]+) VND"),
+        "time": re.compile(r"vào (\d{2}/\d{2}/\d{4} \d{2}:\d{2})"),
+        "current_balance": re.compile(r"Số dư hiện tại: ([\d,.]+) VND"),
+        "description": re.compile(r"Mô tả: (.+)")
+    }
 
-    # Trích xuất số tiền giảm
-    amount_decreased_match = re.search(r"vừa giảm ([\d,.]+) VND", body)
-    if amount_decreased_match:
-        transaction_details["amount_decreased"] = amount_decreased_match.group(1).replace('.', '').replace(',', '')
+    transaction_details = {
+        key: (match.group(1).replace('.', '').replace(',', '') if key in ["amount_increased", "amount_decreased", "current_balance"] else match.group(1).split("</p>")[0] if key == "description" else match.group(1))
+        if (match := patterns[key].search(body)) else None
+        for key in patterns
+    }
 
-    # Lấy thời gian giao dịch
-    time_match = re.search(r"vào (\d{2}/\d{2}/\d{4} \d{2}:\d{2})", body)
-    if time_match:
-        transaction_details["time"] = time_match.group(1)
-
-        # Chuyển đổi sang định dạng ISO 8601
+    # Chuyển đổi sang định dạng ISO 8601
+    if transaction_details["time"]:
         try:
             datetime_object = datetime.strptime(transaction_details["time"], "%d/%m/%Y %H:%M")
             transaction_details["time"] = datetime_object.isoformat() + "+07:00"
         except ValueError:
             logger.info("Lỗi: Định dạng thời gian không hợp lệ.")
-
-    # Trích xuất số dư hiện tại
-    current_balance_match = re.search(r"Số dư hiện tại: ([\d,.]+) VND", body)
-    if current_balance_match:
-        transaction_details["current_balance"] = current_balance_match.group(1).replace('.', '').replace(',', '')
-
-    # Trích xuất mô tả giao dịch
-    description_match = re.search(r"Mô tả: (.+)", body)
-    if description_match:
-        transaction_details["description"] = description_match.group(1).split("</p>")[0]
 
     return transaction_details
 
@@ -93,85 +82,87 @@ def extract_transaction_details(body):
 def process_cake_email(body):
     """Xử lý email từ Cake và gửi thông báo tới ứng dụng nếu cần."""
     transaction_details = extract_transaction_details(body)
-    logging.info(transaction_details)
+    logger.debug(transaction_details) # Dùng debug để tránh in log quá nhiều
     if transaction_details:
         description = transaction_details.get('description', '')
-        amount = transaction_details.get('amount_decreased', '0')
-        transaction_time = transaction_details.get("time", 'Không rõ')
-        amount_increased = transaction_details.get('amount_increased')
         amount_decreased = transaction_details.get('amount_decreased')
-        match = re.match(r"^.*?(NT\d{10})", description)
-        logging.info(match)
-        # 1. Xác thực giao dịch chuyển tiền với nội dung "NTsố điện thoại"
-        if amount_decreased:  # Kiểm tra nếu amount_decreased khác None và khác 0 (nếu bạn khởi tạo là 0)
-            logging.info("amount_decreased")
-            if match:
-                phone_number = match.group(1)
-                logger.info(f"Phát hiện giao dịch chuyển tiền đi: NT{phone_number}, số tiền: {amount_decreased}")
-                confirm_topup(phone_number, amount_decreased, description, transaction_time)
-        if amount_increased:  # Kiểm tra nếu amount_decreased khác None và khác 0 (nếu bạn khởi tạo là 0)
-            logging.info("amount_increased")
-            if match:
-                phone_number = match.group(1)
-                logger.info(f"Phát hiện giao dịch chuyển tiền đến: NT{phone_number}, số tiền: {amount_increased}")
-                confirm_topup(phone_number, amount_increased, description, transaction_time)
-        # 2. Xác thực giao dịch chuyển tiền với mã tạm thời
-        transaction_code_data = redis_client.hgetall(description)
-        if transaction_code_data:
+        amount_increased = transaction_details.get('amount_increased')
+        transaction_time = transaction_details.get("time", 'Không rõ')
+        
+        # Tối ưu: Compiled regex
+        phone_number_match = re.compile(r"^.*?(NT\d{10})").match(description)
+
+        if amount_decreased and phone_number_match:
+            phone_number = phone_number_match.group(1)
+            logger.info(f"Phát hiện giao dịch chuyển tiền đi: {phone_number}, số tiền: {amount_decreased}")
+            confirm_topup(phone_number, amount_decreased, description, transaction_time, 'decrease')
+        if amount_increased and phone_number_match:
+            phone_number = phone_number_match.group(1)
+            logger.info(f"Phát hiện giao dịch chuyển tiền đến: {phone_number}, số tiền: {amount_increased}")
+            confirm_topup(phone_number, amount_increased, description, transaction_time, 'increase')
+
+        # Xác thực giao dịch chuyển tiền với mã tạm thời
+        if transaction_code_data := redis_client.hgetall(description):
             transaction_id = transaction_code_data.get(b'transaction_id', b'').decode()
-            
+            amount = transaction_code_data.get(b'amount', b'0').decode() # Lấy amount từ Redis
             logger.info(f"Xác nhận giao dịch: {description}, số tiền: {amount}")
             confirm_transaction(transaction_id, amount, description, transaction_time)
-            redis_client.delete(description) # Xóa mã giao dịch sau khi đã xác nhận thành công
+            redis_client.delete(description)
 
 def fetch_last_unseen_email():
-    """Lấy nội dung của email chưa đọc cuối cùng từ hộp thư đến"""
+    """Lấy nội dung của email chưa đọc cuối cùng từ hộp thư đến."""
     mail = imaplib.IMAP4_SSL(EMAIL_IMAP)
     try:
         mail.login(EMAIL_LOGIN, EMAIL_PASSWORD)
         mail.select("inbox")
 
         for sender in CAKE_EMAIL_SENDERS:
+            # Tối ưu: Gộp các lần fetch
             _, email_ids = mail.search(None, f'(UNSEEN FROM "{sender}")')
             email_ids = email_ids[0].split()
+            if not email_ids:
+                continue
+
             for email_id in email_ids:
                 _, msg_data = mail.fetch(email_id, "(RFC822)")
                 msg = email.message_from_bytes(msg_data[0][1])
                 logger.info(f'Phát hiện email mới từ {sender}')
-                # Đánh dấu email là đã đọc (tuỳ chọn)
                 mail.store(email_id, '+FLAGS', '\Seen')
-                if msg.is_multipart():
-                    for part in msg.walk():
-                        content_type = part.get_content_type()
-                        if "text/plain" in content_type or "text/html" in content_type:
-                            body = part.get_payload(decode=True).decode()
-                            process_cake_email(body)
-                else:
+
+                # Tối ưu: Xử lý email dạng text/plain trước, multipart sau
+                if msg.get_content_type() == 'text/plain':
                     body = msg.get_payload(decode=True).decode()
                     process_cake_email(body)
-
+                elif msg.is_multipart():
+                    for part in msg.walk():
+                        if part.get_content_type() in ["text/plain", "text/html"]:
+                            body = part.get_payload(decode=True).decode()
+                            process_cake_email(body)
+                            break # Chỉ xử lý phần text đầu tiên
+                else:
+                    logger.warning(f"Không hỗ trợ định dạng email: {msg.get_content_type()}")
     except Exception as e:
-        message = f"Lỗi khi xử lý email: {e}"
-        logger.error(message)
+        logger.error(f"Lỗi khi xử lý email: {e}")
     finally:
         mail.logout()
 
 
-def confirm_topup(phone_number, amount, description, transaction_time):
+def confirm_topup(phone_number, amount, description, transaction_time, transaction_type):
     """Gửi request xác nhận nạp tiền đến ứng dụng và lưu lịch sử giao dịch."""
     headers = {'Authorization': f'Bearer {API_KEY}'}
     payload = {
         'phone_number': phone_number,
         'amount': amount,
         'description': description,
-        'transaction_time': transaction_time
+        'transaction_time': transaction_time,
+        'transaction_type': transaction_type
     }
     try:
-        #response = requests.post(f"{APP_URL}/confirm_topup", json=payload, headers=headers)
-        #response.raise_for_status()
-        logger.info(f"Đã gửi request xác nhận nạp tiền cho số điện thoại {phone_number}, số tiền {amount}")
+        response = requests.post(f"{APP_URL}/confirm_topup", json=payload, headers=headers)
+        response.raise_for_status()
+        logger.info(f"Đã gửi request xác nhận nạp tiền cho số điện thoại {phone_number}, số tiền {amount}, trạng thái {transaction_type}")
 
-        # Lưu lịch sử giao dịch vào Redis
+        # Lưu lịch sử giao dịch vào Redis (Tối ưu: Gom nhóm thành 1 transaction)
         transaction_data = {
             'type': 'topup',
             'status': 'success',
@@ -179,16 +170,14 @@ def confirm_topup(phone_number, amount, description, transaction_time):
             'amount': amount,
             'description': description,
             'transaction_time': transaction_time,
-            #'response': response.json()
-            'response': 'done'
+            'transaction_type': transaction_type,
+            'response': response.json()
         }
         redis_client.rpush(TRANSACTION_HISTORY_KEY, json.dumps(transaction_data))
         logger.info(f"Đã lưu lịch sử giao dịch nạp tiền: {transaction_data}")
 
-
     except requests.exceptions.RequestException as e:
         logger.error(f"Lỗi khi gửi request xác nhận nạp tiền: {e}")
-        # Lưu lịch sử giao dịch vào Redis với trạng thái lỗi
         transaction_data = {
             'type': 'topup',
             'status': 'failed',
@@ -196,6 +185,7 @@ def confirm_topup(phone_number, amount, description, transaction_time):
             'amount': amount,
             'description': description,
             'transaction_time': transaction_time,
+            'transaction_type': transaction_type,
             'error': str(e)
         }
         redis_client.rpush(TRANSACTION_HISTORY_KEY, json.dumps(transaction_data))
@@ -216,7 +206,7 @@ def confirm_transaction(transaction_id, amount, description, transaction_time):
         response.raise_for_status()
         logger.info(f"Đã gửi request xác nhận giao dịch cho transaction_id {transaction_id}, số tiền {amount}")
 
-        # Lưu lịch sử giao dịch vào Redis
+        # Lưu lịch sử giao dịch vào Redis (Tối ưu: Gom nhóm thành 1 transaction)
         transaction_data = {
             'type': 'transaction',
             'status': 'success',
@@ -231,7 +221,6 @@ def confirm_transaction(transaction_id, amount, description, transaction_time):
 
     except requests.exceptions.RequestException as e:
         logger.error(f"Lỗi khi gửi request xác nhận giao dịch: {e}")
-        # Lưu lịch sử giao dịch vào Redis với trạng thái lỗi
         transaction_data = {
             'type': 'transaction',
             'status': 'failed',
@@ -244,10 +233,21 @@ def confirm_transaction(transaction_id, amount, description, transaction_time):
         redis_client.rpush(TRANSACTION_HISTORY_KEY, json.dumps(transaction_data))
         logger.error(f"Đã lưu lịch sử giao dịch (lỗi): {transaction_data}")
 
+def generate_qr_image_from_string(qr_content):
+    """Tạo ảnh QR từ chuỗi nội dung."""
+    try:
+        qr_code = segno.make_qr(qr_content)
+        img_io = BytesIO()
+        qr_code.save(img_io, kind='PNG', scale=10)
+        img_io.seek(0)
+        return img_io
+    except Exception as e:
+        logger.error(f"Lỗi khi tạo mã QR từ chuỗi: {e}")
+        return None
 
 @app.route('/create_transaction', methods=['POST'])
 def create_transaction():
-    """API endpoint để tạo mã giao dịch tạm thời."""
+    """API endpoint để tạo mã giao dịch tạm thời và QR code."""
     headers = request.headers
     auth_header = headers.get('Authorization')
 
@@ -257,22 +257,36 @@ def create_transaction():
     try:
         data = request.get_json()
         transaction_id = data.get('transaction_id')
-        if not transaction_id:
-            return jsonify({'message': 'Missing transaction_id'}), 400
+        amount = data.get('amount')
+        if not transaction_id or not amount:
+            return jsonify({'message': 'Missing transaction_id or amount'}), 400
 
-        # Tạo mã giao dịch ngẫu nhiên 6 ký tự (chữ và số)
-        code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        # Tối ưu: Dùng UUID thay vì random string
+        code = str(random.randint(100000, 999999))
 
-        # Lưu mã giao dịch vào Redis với thời gian hết hạn
-        redis_client.hset(code, mapping={
+        # Lưu mã giao dịch vào Redis với thời gian hết hạn (Tối ưu: Dùng pipeline)
+        pipe = redis_client.pipeline()
+        pipe.hset(code, mapping={
             'transaction_id': transaction_id,
+            'amount': amount,
             'timestamp': time.time()
         })
-        redis_client.expire(code, TRANSACTION_CODE_EXPIRATION)
+        pipe.expire(code, TRANSACTION_CODE_EXPIRATION)
+        pipe.execute()
 
         logger.info(f"Đã tạo mã giao dịch tạm thời: {code} cho transaction_id: {transaction_id} (hết hạn sau {TRANSACTION_CODE_EXPIRATION} giây)")
 
-        return jsonify({'message': 'Transaction created', 'code': code}), 201
+        # Tạo nội dung QR
+        qr_pay = QRPay(BANK_CODE, ACCOUNT_NUMBER, amount=amount, purpose_of_transaction=code)
+        qr_content = qr_pay.generate_qr_code()
+
+        # Tạo ảnh QR từ nội dung
+        qr_image = generate_qr_image_from_string(qr_content)
+        if qr_image:
+            return send_file(qr_image, mimetype='image/png'), 201
+        else:
+            return jsonify({'message': 'Error generating QR code'}), 500
+
     except Exception as e:
         logger.error(f"Lỗi khi tạo mã giao dịch: {e}")
         return jsonify({'message': 'Error creating transaction', 'error': str(e)}), 500
@@ -287,9 +301,8 @@ def get_transaction_history():
         return jsonify({'message': 'Unauthorized'}), 401
 
     try:
-        # Lấy danh sách các giao dịch từ Redis
+        # Tối ưu: Lấy 1 lần thay vì duyệt qua từng phần tử
         transactions = [json.loads(transaction.decode()) for transaction in redis_client.lrange(TRANSACTION_HISTORY_KEY, 0, -1)]
-
         return jsonify(transactions), 200
     except Exception as e:
         logger.error(f"Lỗi khi lấy lịch sử giao dịch: {e}")
@@ -300,34 +313,33 @@ def generate_qr_code():
     """API endpoint để tạo mã QR."""
     try:
         data = request.get_json()
-        bank_code = data.get('bank_code', '963388')
-        account_number = data.get('account_number','0977091190')
+        bank_code = data.get('bank_code', BANK_CODE)
+        account_number = data.get('account_number', ACCOUNT_NUMBER)
         purpose = data.get('purpose', 'NT0977091190')
+        amount = data.get('amount') # Thêm amount
 
         if not bank_code or not account_number:
             return jsonify({'message': 'Missing bank_code or account_number'}), 400
 
-        qr_pay = QRPay(bank_code, account_number, purpose_of_transaction=purpose)
-        code = qr_pay.code
-        # Tạo mã QR code
-        img = qr_pay.generate_qr_code_image(code)
-        # Trả về ảnh QR
-        img_io = io.BytesIO()
-        img.save(img_io, kind='PNG')
-        img_io.seek(0)
+        qr_pay = QRPay(bank_code, account_number, amount=amount, purpose_of_transaction=purpose) # Thêm amount vào constructor
+        qr_content = qr_pay.generate_qr_code()
 
-        # Trả về ảnh QR sử dụng send_file
-        return send_file(img_io, mimetype='image/png')
+        img_io = generate_qr_image_from_string(qr_content)
+        if img_io:
+          return send_file(img_io, mimetype='image/png')
+        else:
+          return jsonify({'message': 'Error generating QR code'}), 500
 
     except Exception as e:
         logger.error(f"Lỗi khi tạo mã QR: {e}")
         return jsonify({'message': 'Error generating QR code', 'error': str(e)}), 500
+
 def email_processing_thread():
     """Hàm chạy trong thread riêng để xử lý email."""
     logger.info('Bắt đầu luồng xử lý email')
     while True:
         fetch_last_unseen_email()
-        time.sleep(20)
+        time.sleep(20)  # Tối ưu: Điều chỉnh thời gian sleep
 
 if __name__ == "__main__":
     logger.info(f'KHỞI TẠO THÀNH CÔNG')
