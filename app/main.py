@@ -252,7 +252,7 @@ def generate_qr_image_from_string(qr_content):
     """Tạo ảnh QR từ chuỗi nội dung."""
     try:
         img_io = BytesIO()
-        qr_content.save(img_io, kind='PNG', scale=30)
+        qr_content.save(img_io, kind='SVG', scale=10)
         img_io.seek(0)
         return img_io
     except Exception as e:
@@ -300,7 +300,7 @@ def create_transaction():
         # Tạo ảnh QR từ nội dung
         qr_image = generate_qr_image_from_string(qr_content)
         if qr_image:
-            return send_file(qr_image, mimetype='image/png'), 201
+            return send_file(qr_image, mimetype='image/svg+xml'), 201
         else:
             return jsonify({'message': 'Error generating QR code'}), 500
 
@@ -342,7 +342,7 @@ def generate_qr_code():
 
         img_io = generate_qr_image_from_string(qr_content)
         if img_io:
-          return send_file(img_io, mimetype='image/png')
+          return send_file(img_io, mimetype='image/svg+xml')
         else:
           return jsonify({'message': 'Error generating QR code'}), 500
 
