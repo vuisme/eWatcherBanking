@@ -236,9 +236,8 @@ def confirm_transaction(transaction_id, amount, description, transaction_time):
 def generate_qr_image_from_string(qr_content):
     """Tạo ảnh QR từ chuỗi nội dung."""
     try:
-        qr_code = segno.make_qr(qr_content)
         img_io = BytesIO()
-        qr_code.save(img_io, kind='PNG', scale=10)
+        qr_content.save(img_io, kind='PNG', scale=100)
         img_io.seek(0)
         return img_io
     except Exception as e:
