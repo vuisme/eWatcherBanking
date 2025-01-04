@@ -278,7 +278,8 @@ def create_transaction():
 
         # Tạo nội dung QR
         qr_pay = QRPay(BANK_CODE, ACCOUNT_NUMBER, amount=amount, purpose_of_transaction=code)
-        qr_content = qr_pay.generate_qr_code()
+        qr_content = qr_pay.generate_qr_code_image(qr_pay.code)
+
 
         # Tạo ảnh QR từ nội dung
         qr_image = generate_qr_image_from_string(qr_content)
@@ -322,7 +323,7 @@ def generate_qr_code():
             return jsonify({'message': 'Missing bank_code or account_number'}), 400
 
         qr_pay = QRPay(bank_code, account_number, amount=amount, purpose_of_transaction=purpose) # Thêm amount vào constructor
-        qr_content = qr_pay.generate_qr_code()
+        qr_content = qr_pay.generate_qr_code_image(qr_pay.code)
 
         img_io = generate_qr_image_from_string(qr_content)
         if img_io:
