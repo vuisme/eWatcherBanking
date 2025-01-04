@@ -120,14 +120,14 @@ def process_cake_email(body):
                         # Cập nhật trạng thái thành completed
                         redis_client.hset(pending_transaction_key, 'status', 'completed')
                         # Cập nhật lịch sử giao dịch
-                        update_transaction_history(code, 'completed', amount_increased)
+                        update_transaction_history(code, 'completed', amount_increased, description, transaction_time)
                         confirm_transaction(transaction_id, amount_increased, description, transaction_time)
                         logger.info(f"Cập nhật trạng thái giao dịch thành công: {code}")
                     elif status == 'expired':
                         # Cập nhật trạng thái thành received_after_expired
                         redis_client.hset(pending_transaction_key, 'status', 'received_after_expired')
                         # Cập nhật lịch sử giao dịch
-                        update_transaction_history(code, 'received_after_expired', amount_increased)
+                        update_transaction_history(code, 'received_after_expired', amount_increased, description, transaction_time)
                         confirm_transaction(transaction_id, amount_increased, description, transaction_time)
                         logger.info(f"Cập nhật trạng thái giao dịch nhận được sau khi hết hạn: {code}")
                     else:
@@ -235,32 +235,23 @@ def confirm_transaction(transaction_id, amount, description, transaction_time):
         # response.raise_for_status()
         logger.info(f"Đã gửi request xác nhận giao dịch cho transaction_id {transaction_id}, số tiền {amount}")
 
-        transaction_data = {
-            'type': 'transaction',
-            'status': 'success',
-            'transaction_id': transaction_id,
-            'amount': amount,
-            'description': description,
-            'transaction_time': transaction_time,
-            # 'response': response.json()
-            'response': 'confirmed'
-        }
-        redis_client.rpush(TRANSACTION_HISTORY_KEY, json.dumps(transaction_data))
-        logger.info(f"Đã lưu lịch sử giao dịch: {transaction_data}")
+        # Không lưu ở đây nữa vì đã lưu ở update_transaction_history
+        # transaction_data = {
+        #     'type': 'transaction',
+        #     'status': 'success',
+        #     'transaction_id': transaction_id,
+        #     'amount': amount,
+        #     'description': description,
+        #     'transaction_time': transaction_time,
+        #     # 'response': response.json()
+        #     'response': 'confirmed'
+        # }
+        # redis_client.rpush(TRANSACTION_HISTORY_KEY, json.dumps(transaction_data))
+        # logger.info(f"Đã lưu lịch sử giao dịch: {transaction_data}")
 
     except requests.exceptions.RequestException as e:
         logger.error(f"Lỗi khi gửi request xác nhận giao dịch: {e}")
-        transaction_data = {
-            'type': 'transaction',
-            'status': 'failed',
-            'transaction_id': transaction_id,
-            'amount': amount,
-            'description': description,
-            'transaction_time': transaction_time,
-            'error': str(e)
-        }
-        redis_client.rpush(TRANSACTION_HISTORY_KEY, json.dumps(transaction_data))
-        logger.error(f"Đã lưu lịch sử giao dịch (lỗi): {transaction_data}")
+        # Có thể cập nhật status = failed nếu cần thiết
 
 def generate_qr_image_from_string(qr_content):
     """Tạo ảnh QR từ chuỗi nội dung."""
@@ -343,10 +334,11 @@ def get_transaction_history():
 
     if not auth_header or auth_header != f'Bearer {API_KEY}':
         return jsonify({'message': 'Unauthorized'}), 401
+
     try:
         transactions = [json.loads(transaction.decode()) for transaction in redis_client.lrange(TRANSACTION_HISTORY_KEY, 0, -1)]
         if not transactions:
-            return jsonify({'message': 'No transactions found'}), 404 # Thêm xử lý trường hợp không có giao dịch
+            return jsonify({'message': 'No transactions found'}), 404
         return jsonify(transactions), 200
     except Exception as e:
         logger.error(f"Lỗi khi lấy lịch sử giao dịch: {e}")
@@ -402,15 +394,20 @@ def check_expired_transactions():
 
         time.sleep(60) # Kiểm tra mỗi 60 giây
 
-def update_transaction_history(code, new_status, amount_received=None):
+def update_transaction_history(code, new_status, amount_received=None, description=None, transaction_time=None):
     """Cập nhật trạng thái của giao dịch trong transaction_history."""
     try:
         transactions = [json.loads(transaction.decode()) for transaction in redis_client.lrange(TRANSACTION_HISTORY_KEY, 0, -1)]
         for i, transaction in enumerate(transactions):
             if transaction.get('code') == code:
                 transaction['status'] = new_status
-                if amount_received:
-                  transaction['amount'] = amount_received
+                if amount_received is not None:
+                    transaction['amount'] = amount_received
+                if description is not None:
+                    transaction['description'] = description
+                if transaction_time is not None:
+                    transaction['transaction_time'] = transaction_time
+
                 redis_client.lset(TRANSACTION_HISTORY_KEY, i, json.dumps(transaction))
                 logger.info(f"Đã cập nhật trạng thái giao dịch trong lịch sử: code={code}, status={new_status}")
                 break
