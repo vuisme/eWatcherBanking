@@ -82,14 +82,13 @@ def extract_transaction_details(body):
 def process_cake_email(body):
     """Xử lý email từ Cake và gửi thông báo tới ứng dụng nếu cần."""
     transaction_details = extract_transaction_details(body)
-    logger.debug(transaction_details) # Dùng debug để tránh in log quá nhiều
+    logger.debug(transaction_details)
     if transaction_details:
         description = transaction_details.get('description', '')
         amount_decreased = transaction_details.get('amount_decreased')
         amount_increased = transaction_details.get('amount_increased')
         transaction_time = transaction_details.get("time", 'Không rõ')
-        
-        # Tối ưu: Compiled regex
+
         phone_number_match = re.compile(r"^.*?(NT\d{10})").match(description)
 
         if amount_decreased and phone_number_match:
@@ -102,12 +101,26 @@ def process_cake_email(body):
             confirm_topup(phone_number, amount_increased, description, transaction_time, 'increase')
 
         # Xác thực giao dịch chuyển tiền với mã tạm thời
-        if transaction_code_data := redis_client.hgetall(description):
-            transaction_id = transaction_code_data.get(b'transaction_id', b'').decode()
-            amount = transaction_code_data.get(b'amount', b'0').decode() # Lấy amount từ Redis
-            logger.info(f"Xác nhận giao dịch: {description}, số tiền: {amount}")
-            confirm_transaction(transaction_id, amount, description, transaction_time)
-            redis_client.delete(description)
+        # Tìm kiếm mã giao dịch VCD{timestamp} trong description
+        match = re.search(r"(VCD\d{10})", description)  # Tìm VCD và 10 chữ số (timestamp)
+        if match:
+            code = match.group(1)
+            data = redis_client.hgetall(code)
+            if data and b'type' in data and data[b'type'].decode() == 'receive':
+                if amount_increased:
+                    transaction_id = data.get(b'transaction_id', b'').decode()
+                    amount = data.get(b'amount', b'0').decode()
+                    timestamp = data.get(b'timestamp', b'0').decode()
+
+                    logger.info(f"Xác nhận giao dịch NHẬN TIỀN: {description}, số tiền: {amount_increased}, transaction_id: {transaction_id}, code: {code}, timestamp: {timestamp}")
+                    confirm_transaction(transaction_id, amount_increased, description, transaction_time)
+                    redis_client.delete(code)
+                else:
+                    logger.info(f"Giao dịch không khớp với số tiền nhận được: {description}")
+            else:
+                logger.info(f"Không tìm thấy mã giao dịch hoặc không phải giao dịch nhận tiền: {code}")
+        else:
+            logger.info("Không xác nhận giao dịch")
 
 def fetch_last_unseen_email():
     """Lấy nội dung của email chưa đọc cuối cùng từ hộp thư đến."""
@@ -261,19 +274,21 @@ def create_transaction():
             return jsonify({'message': 'Missing transaction_id or amount'}), 400
 
         # Tối ưu: Dùng UUID thay vì random string
-        code = str(random.randint(100000, 999999))
+        timestamp = int(time.time())
+        code = f"VCD{timestamp}"
 
         # Lưu mã giao dịch vào Redis với thời gian hết hạn (Tối ưu: Dùng pipeline)
         pipe = redis_client.pipeline()
         pipe.hset(code, mapping={
             'transaction_id': transaction_id,
             'amount': amount,
-            'timestamp': time.time()
+            'timestamp': timestamp,
+            'type': 'receive'
         })
         pipe.expire(code, TRANSACTION_CODE_EXPIRATION)
         pipe.execute()
 
-        logger.info(f"Đã tạo mã giao dịch tạm thời: {code} cho transaction_id: {transaction_id} (hết hạn sau {TRANSACTION_CODE_EXPIRATION} giây)")
+        logger.info(f"Đã tạo mã giao dịch tạm thời: {code} cho transaction_id: {transaction_id} (hết hạn sau {TRANSACTION_CODE_EXPIRATION} giây), type: receive")
 
         # Tạo nội dung QR
         qr_pay = QRPay(BANK_CODE, ACCOUNT_NUMBER, amount=amount, purpose_of_transaction=code)
