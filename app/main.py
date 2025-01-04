@@ -171,8 +171,8 @@ def confirm_topup(phone_number, amount, description, transaction_time, transacti
         'transaction_type': transaction_type
     }
     try:
-        response = requests.post(f"{APP_URL}/confirm_topup", json=payload, headers=headers)
-        response.raise_for_status()
+        # response = requests.post(f"{APP_URL}/confirm_topup", json=payload, headers=headers)
+        # response.raise_for_status()
         logger.info(f"Đã gửi request xác nhận nạp tiền cho số điện thoại {phone_number}, số tiền {amount}, trạng thái {transaction_type}")
 
         # Lưu lịch sử giao dịch vào Redis (Tối ưu: Gom nhóm thành 1 transaction)
@@ -215,8 +215,8 @@ def confirm_transaction(transaction_id, amount, description, transaction_time):
         'transaction_time': transaction_time
     }
     try:
-        response = requests.post(f"{APP_URL}/confirm_transaction", json=payload, headers=headers)
-        response.raise_for_status()
+        # response = requests.post(f"{APP_URL}/confirm_transaction", json=payload, headers=headers)
+        # response.raise_for_status()
         logger.info(f"Đã gửi request xác nhận giao dịch cho transaction_id {transaction_id}, số tiền {amount}")
 
         # Lưu lịch sử giao dịch vào Redis (Tối ưu: Gom nhóm thành 1 transaction)
