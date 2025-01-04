@@ -290,10 +290,10 @@ def create_transaction():
         pipe.expire(code, TRANSACTION_CODE_EXPIRATION)
         pipe.execute()
 
-        logger.info(f"Đã tạo mã giao dịch tạm thời: {code} cho transaction_id: {transaction_id} (hết hạn sau {TRANSACTION_CODE_EXPIRATION} giây), type: receive")
+        logger.info(f"Đã tạo mã giao dịch tạm thời: {code} cho transaction_id: {transaction_id} với transaction_amount: {amount} (hết hạn sau {TRANSACTION_CODE_EXPIRATION} giây), type: receive")
 
         # Tạo nội dung QR
-        qr_pay = QRPay(BANK_CODE, ACCOUNT_NUMBER, amount=amount, purpose_of_transaction=code)
+        qr_pay = QRPay(BANK_CODE, ACCOUNT_NUMBER, transaction_amount=amount, point_of_initiation_method='DYNAMIC', purpose_of_transaction=code)
         qr_content = qr_pay.generate_qr_code_image(qr_pay.code)
 
 
@@ -333,12 +333,11 @@ def generate_qr_code():
         bank_code = data.get('bank_code', BANK_CODE)
         account_number = data.get('account_number', ACCOUNT_NUMBER)
         purpose = data.get('purpose', 'NT0977091190')
-        amount = data.get('amount') # Thêm amount
 
         if not bank_code or not account_number:
             return jsonify({'message': 'Missing bank_code or account_number'}), 400
 
-        qr_pay = QRPay(bank_code, account_number, amount=amount, purpose_of_transaction=purpose) # Thêm amount vào constructor
+        qr_pay = QRPay(bank_code, account_number, point_of_initiation_method='STATIC', purpose_of_transaction=purpose) # Thêm amount vào constructor
         qr_content = qr_pay.generate_qr_code_image(qr_pay.code)
 
         img_io = generate_qr_image_from_string(qr_content)
