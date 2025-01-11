@@ -6,6 +6,7 @@ import os
 import requests
 import segno
 import io
+import base64
 from datetime import datetime
 import logging
 from flask import Flask, request, jsonify, send_file
@@ -315,13 +316,29 @@ def create_transaction():
         # Tạo nội dung QR
         qr_pay = QRPay(BANK_CODE, ACCOUNT_NUMBER, transaction_amount=amount, point_of_initiation_method='DYNAMIC', purpose_of_transaction=code)
         qr_content = qr_pay.generate_qr_code_image(qr_pay.code)
+        
+        # Lấy dữ liệu svg
+        img_io = generate_qr_image_from_string(qr_content)
+        svg_data = img_io.getvalue()
 
         # Tạo ảnh QR từ nội dung
-        qr_image = generate_qr_image_from_string(qr_content)
-        if qr_image:
-            return send_file(qr_image, mimetype='image/svg+xml'), 201
-        else:
-            return jsonify({'message': 'Error generating QR code'}), 500
+        # qr_image = generate_qr_image_from_string(qr_content) # Bạn không cần dùng biến này nữa
+
+        # Mã hóa base64
+        qr_code_base64 = base64.b64encode(svg_data).decode('utf-8')
+
+        # Tạo JSON response
+        response_data = {
+            "status": "success",
+            "transaction_id": transaction_id,
+            "code": code,
+            "qr_code_data": qr_code_base64,
+            "amount": amount,
+            "expires_at": timestamp + TRANSACTION_CODE_EXPIRATION,
+            "message": ""
+        }
+
+        return jsonify(response_data), 201
 
     except Exception as e:
         logger.error(f"Lỗi khi tạo mã giao dịch: {e}")
