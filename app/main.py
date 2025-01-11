@@ -400,6 +400,7 @@ def check_transaction_status():
 
 def check_expired_transactions():
     """Kiểm tra các giao dịch pending đã hết hạn và cập nhật trạng thái."""
+    logger.info("Bắt đầu luồng kiểm tra giao dịch hết hạn")
     while True:
         try:
             cursor = '0'  # Bắt đầu từ cursor 0
