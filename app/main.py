@@ -399,36 +399,44 @@ def check_transaction_status():
 
 
 def check_expired_transactions():
-    """Kiểm tra các giao dịch pending đã hết hạn và cập nhật trạng thái."""
     while True:
         try:
-            cursor = '0'  # Bắt đầu từ cursor 0
-            logger.info("Bắt đầu quét giao dịch pending...")  # Log mỗi lần quét
+            cursor = '0'
+            logger.info("Bắt đầu quét giao dịch pending...")
             pending_transactions_found = False
             while cursor != 0:
                 cursor, keys = redis_client.scan(cursor=cursor, match=f"{PENDING_TRANSACTION_PREFIX}*", count=100)
                 for key in keys:
-                    # Lấy thông tin giao dịch
-                    transaction_data = redis_client.hgetall(key)
+                    logger.info(f"Kiểm tra key: {key}")
+                    # Bắt đầu transaction
+                    pipe = redis_client.pipeline()
+                    pipe.watch(key) # Theo dõi thay đổi trên key
+
+                    transaction_data = pipe.hgetall(key)
+                    logger.info(f"  Dữ liệu giao dịch từ Redis: {transaction_data}")
+
                     if transaction_data:
                         status = transaction_data.get(b'status', b'').decode()
                         expiration_time = int(transaction_data.get(b'timestamp', b'0').decode()) + TRANSACTION_CODE_EXPIRATION
                         code = key.decode().replace(PENDING_TRANSACTION_PREFIX, "")
-                        transaction_id = transaction_data.get(b'transaction_id', b'').decode()
-                        amount = transaction_data.get(b'amount', b'').decode()
 
-                        # Nếu trạng thái là pending
                         if status == 'pending':
                             pending_transactions_found = True
-                            logger.info(f"  Tìm thấy giao dịch pending: code={code}, transaction_id={transaction_id}, amount={amount}, expiration_time={datetime.fromtimestamp(expiration_time).strftime('%Y-%m-%d %H:%M:%S')}")
+                            logger.info(f"  Tìm thấy giao dịch pending: code={code}, expiration_time={datetime.fromtimestamp(expiration_time).strftime('%Y-%m-%d %H:%M:%S')}")
 
-                            # Kiểm tra xem đã hết hạn chưa
                             if int(time.time()) > expiration_time:
-                                # Cập nhật trạng thái thành expired
-                                redis_client.hset(key, 'status', 'expired')
-                                # Cập nhật lịch sử giao dịch
-                                update_transaction_history(code, 'expired')
-                                logger.info(f"  Cập nhật trạng thái giao dịch thành expired: {code}")
+                                logger.info(f"    Current time: {int(time.time())}, Expiration time: {expiration_time}, Timestamp: {transaction_data.get(b'timestamp', b'').decode()}")
+                                # Cập nhật trạng thái thành expired và xóa key trong cùng một transaction
+                                try:
+                                    pipe.multi()
+                                    pipe.hset(key, 'status', 'expired')
+                                    update_transaction_history(code, 'expired', pipe=pipe) # Truyền pipe vào hàm này
+                                    pipe.expire(key, 60) # Gia hạn thời gian sống thêm 60 giây để đảm bảo transaction_history được cập nhật
+                                    pipe.execute()
+                                    logger.info(f"  Cập nhật trạng thái giao dịch thành expired và gia hạn TTL: {code}")
+                                except redis.exceptions.WatchError:
+                                    logger.warning(f"  Giao dịch {code} đã bị thay đổi bởi một client khác. Bỏ qua cập nhật.")
+                                    continue
 
             if not pending_transactions_found:
                 logger.info("  Không tìm thấy giao dịch pending nào.")
@@ -436,15 +444,19 @@ def check_expired_transactions():
         except Exception as e:
             logger.error(f"Lỗi khi kiểm tra giao dịch hết hạn: {e}")
 
-        time.sleep(60) # Kiểm tra mỗi 60 giây
+        time.sleep(60)
 
 
-def update_transaction_history(code, new_status, amount_received=None, description=None, transaction_time=None):
+def update_transaction_history(code, new_status, amount_received=None, description=None, transaction_time=None, pipe=None):
     """Cập nhật trạng thái của giao dịch trong transaction_history."""
     try:
+        transaction_found = False
         transactions = [json.loads(transaction.decode()) for transaction in redis_client.lrange(TRANSACTION_HISTORY_KEY, 0, -1)]
+        updated_transactions = []
+
         for i, transaction in enumerate(transactions):
             if transaction.get('code') == code:
+                transaction_found = True
                 transaction['status'] = new_status
                 if amount_received is not None:
                     transaction['amount'] = amount_received
@@ -452,12 +464,27 @@ def update_transaction_history(code, new_status, amount_received=None, descripti
                     transaction['description'] = description
                 if transaction_time is not None:
                     transaction['transaction_time'] = transaction_time
+                updated_transactions.append(transaction)
+                logger.info(f"  Đã cập nhật trạng thái giao dịch trong lịch sử: code={code}, status={new_status}")
+            else:
+                updated_transactions.append(transaction)
 
-                redis_client.lset(TRANSACTION_HISTORY_KEY, i, json.dumps(transaction))
-                logger.info(f"Đã cập nhật trạng thái giao dịch trong lịch sử: code={code}, status={new_status}")
-                break
+        if transaction_found:
+            if pipe is None:
+                # Nếu không sử dụng pipeline, cập nhật trực tiếp
+                redis_client.delete(TRANSACTION_HISTORY_KEY)
+                if updated_transactions:
+                    redis_client.rpush(TRANSACTION_HISTORY_KEY, *[json.dumps(transaction) for transaction in updated_transactions])
+            else:
+                # Nếu sử dụng pipeline, thêm lệnh vào pipeline
+                pipe.delete(TRANSACTION_HISTORY_KEY)
+                if updated_transactions:
+                    pipe.rpush(TRANSACTION_HISTORY_KEY, *[json.dumps(transaction) for transaction in updated_transactions])
+        else:
+            logger.warning(f"  Không tìm thấy giao dịch trong lịch sử: {code}")
     except Exception as e:
         logger.error(f"Lỗi khi cập nhật lịch sử giao dịch: {e}")
+
 
 def get_transaction_status(code):
     """Lấy trạng thái giao dịch dựa trên mã giao dịch (code)."""
