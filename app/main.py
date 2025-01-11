@@ -319,9 +319,8 @@ def create_transaction():
         
         # Tạo ảnh QR từ nội dung
         qr_image = generate_qr_image_from_string(qr_content) # Bạn không cần dùng biến này nữa
-        logger.info(qr_image)
         # Mã hóa base64
-        qr_code_base64 = base64.b64encode(qr_content.getvalue()).decode('utf-8')
+        qr_code_base64 = base64.b64encode(qr_image.getvalue()).decode('utf-8')
         
         # Tạo JSON response
         response_data = {
