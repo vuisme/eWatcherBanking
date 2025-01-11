@@ -316,7 +316,7 @@ def create_transaction():
         # Tạo nội dung QR
         qr_pay = QRPay(BANK_CODE, ACCOUNT_NUMBER, transaction_amount=amount, point_of_initiation_method='DYNAMIC', purpose_of_transaction=code)
         qr_content = qr_pay.generate_qr_pay()
-
+        logger.info(qr_content)
         # Tạo ảnh QR từ nội dung
         qr_image = generate_qr_image_from_string(qr_content) # Bạn không cần dùng biến này nữa
 
