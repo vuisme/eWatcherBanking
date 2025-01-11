@@ -404,7 +404,6 @@ def check_expired_transactions():
         try:
             cursor = '0'
             logger.info("Bắt đầu quét giao dịch pending...")
-            pending_transactions_found = False
             while cursor != 0:
                 cursor, keys = redis_client.scan(cursor=cursor, match=f"{PENDING_TRANSACTION_PREFIX}*", count=100)
                 for key in keys:
@@ -422,7 +421,6 @@ def check_expired_transactions():
                         code = key.decode().replace(PENDING_TRANSACTION_PREFIX, "")
 
                         if status == 'pending':
-                            pending_transactions_found = True
                             logger.info(f"  Tìm thấy giao dịch pending: code={code}, expiration_time={datetime.fromtimestamp(expiration_time).strftime('%Y-%m-%d %H:%M:%S')}")
 
                             if int(time.time()) > expiration_time:
@@ -431,20 +429,26 @@ def check_expired_transactions():
                                 try:
                                     pipe.multi()
                                     pipe.hset(key, 'status', 'expired')
-                                    update_transaction_history(code, 'expired', pipe=pipe) # Truyền pipe vào hàm này
-                                    pipe.delete(key) # Xóa key
+                                    update_transaction_history(code, 'expired', pipe=pipe)
+                                    pipe.delete(key)
                                     pipe.execute()
                                     logger.info(f"  Cập nhật trạng thái giao dịch thành expired và xóa key: {code}")
                                 except redis.exceptions.WatchError:
                                     logger.warning(f"  Giao dịch {code} đã bị thay đổi bởi một client khác. Thử lại sau.")
-                                    continue # Thử lại ở lần quét sau
-                            # Không cần else ở đây nữa
+                                    continue
 
-                    # Nếu WatchError xảy ra, luồng sẽ tiếp tục ở đây, bỏ qua lần lặp hiện tại và thử lại ở lần quét sau.
-                    # Nếu transaction thành công, luồng sẽ tiếp tục bình thường (không chạy vào WatchError).
-
-            if not pending_transactions_found:
-                logger.info("  Không tìm thấy giao dịch pending nào.")
+            # Kiểm tra các giao dịch pending trong transaction_history mà không có pending_transaction key
+            logger.info("Kiểm tra các giao dịch pending trong transaction_history...")
+            transactions = [json.loads(transaction.decode()) for transaction in redis_client.lrange(TRANSACTION_HISTORY_KEY, 0, -1)]
+            for i, transaction in enumerate(transactions):
+                code = transaction.get('code')
+                if code and transaction.get('status') == 'pending' and transaction.get('type') == 'transaction':
+                    pending_transaction_key = f"{PENDING_TRANSACTION_PREFIX}{code}"
+                    if not redis_client.exists(pending_transaction_key):
+                        logger.info(f"  Giao dịch {code} trong transaction_history không có pending_transaction key. Cập nhật trạng thái thành expired.")
+                        transaction['status'] = 'expired'
+                        redis_client.lset(TRANSACTION_HISTORY_KEY, i, json.dumps(transaction))
+                        logger.info(f"  Đã cập nhật trạng thái giao dịch {code} trong transaction_history thành expired.")
 
         except Exception as e:
             logger.error(f"Lỗi khi kiểm tra giao dịch hết hạn: {e}")
