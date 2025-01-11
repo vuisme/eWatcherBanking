@@ -258,7 +258,7 @@ def generate_qr_image_from_string(qr_content, scale=10):
     """Tạo ảnh QR PNG từ chuỗi nội dung sử dụng segno."""
     try:
         img_io = BytesIO()
-        qr_content.save(img_io, kind='png', scale=scale)
+        qr_content.save(img_io, kind='png', scale=scale, dark='darkred', data_dark='darkorange', data_light='yellow')
         img_io.seek(0)
         return img_io
     except Exception as e:
