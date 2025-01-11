@@ -291,7 +291,8 @@ def create_transaction():
             'amount': amount,
             'timestamp': timestamp,
             'type': 'receive',
-            'status': 'pending'
+            'status': 'pending',
+            'description': f"Giao dịch {code}"
         })
         pipe.expire(pending_transaction_key, TRANSACTION_CODE_EXPIRATION)
 
@@ -369,6 +370,34 @@ def generate_qr_code():
         logger.error(f"Lỗi khi tạo mã QR: {e}")
         return jsonify({'message': 'Error generating QR code', 'error': str(e)}), 500
 
+@app.route('/check_transaction_status', methods=['GET'])
+def check_transaction_status():
+    """API endpoint để kiểm tra trạng thái giao dịch."""
+    headers = request.headers
+    auth_header = headers.get('Authorization')
+
+    if not auth_header or auth_header != f'Bearer {API_KEY}':
+        return jsonify({'message': 'Unauthorized'}), 401
+
+    code = request.args.get('code')
+    if not code:
+        return jsonify({'message': 'Missing transaction code'}), 400
+
+    status, amount, timestamp, transaction_id, description = get_transaction_status(code)
+
+    if status is None:
+        return jsonify({'message': 'Transaction not found'}), 404
+    else:
+        return jsonify({
+            'status': status,
+            'amount': amount,
+            'timestamp': timestamp,
+            'transaction_id': transaction_id,
+            'description': description,
+            'message': get_status_message(status)  # Thêm message dựa trên status
+        }), 200
+
+
 def check_expired_transactions():
     """Kiểm tra các giao dịch pending đã hết hạn và cập nhật trạng thái."""
     while True:
@@ -413,6 +442,39 @@ def update_transaction_history(code, new_status, amount_received=None, descripti
                 break
     except Exception as e:
         logger.error(f"Lỗi khi cập nhật lịch sử giao dịch: {e}")
+
+def get_transaction_status(code):
+    """Lấy trạng thái giao dịch dựa trên mã giao dịch (code)."""
+    pending_transaction_key = f"{PENDING_TRANSACTION_PREFIX}{code}"
+    data = redis_client.hgetall(pending_transaction_key)
+
+    if not data:
+        # Kiểm tra trong lịch sử giao dịch nếu không tìm thấy trong pending
+        transactions = [json.loads(transaction.decode()) for transaction in redis_client.lrange(TRANSACTION_HISTORY_KEY, 0, -1)]
+        for transaction in transactions:
+            if transaction.get('code') == code:
+                return transaction.get('status'), transaction.get('amount'), transaction.get('timestamp'), transaction.get('transaction_id'), transaction.get('description') # Trả về thêm thông tin
+        return None, None, None, None, None  # Không tìm thấy
+
+    status = data.get(b'status', b'').decode()
+    amount = data.get(b'amount', b'0').decode()
+    timestamp = data.get(b'timestamp', b'0').decode()
+    transaction_id = data.get(b'transaction_id', b'').decode()
+    description = data.get(b'description', b'').decode() # Lấy description từ pending transaction nếu có
+    return status, amount, timestamp, transaction_id, description
+
+def get_status_message(status):
+    if status == 'pending':
+        return 'Transaction is pending'
+    elif status == 'completed':
+        return 'Transaction completed'
+    elif status == 'expired':
+        return 'Transaction expired'
+    elif status == 'received_after_expired':
+        return 'Transaction received after expired'
+    else:
+        return 'Unknown transaction status'
+
 
 def email_processing_thread():
     """Hàm chạy trong thread riêng để xử lý email."""
