@@ -399,6 +399,7 @@ def check_transaction_status():
 
 
 def check_expired_transactions():
+    """Kiểm tra các giao dịch pending đã hết hạn và cập nhật trạng thái."""
     while True:
         try:
             cursor = '0'
@@ -431,12 +432,16 @@ def check_expired_transactions():
                                     pipe.multi()
                                     pipe.hset(key, 'status', 'expired')
                                     update_transaction_history(code, 'expired', pipe=pipe) # Truyền pipe vào hàm này
-                                    pipe.expire(key, 60) # Gia hạn thời gian sống thêm 60 giây để đảm bảo transaction_history được cập nhật
+                                    pipe.delete(key) # Xóa key
                                     pipe.execute()
-                                    logger.info(f"  Cập nhật trạng thái giao dịch thành expired và gia hạn TTL: {code}")
+                                    logger.info(f"  Cập nhật trạng thái giao dịch thành expired và xóa key: {code}")
                                 except redis.exceptions.WatchError:
-                                    logger.warning(f"  Giao dịch {code} đã bị thay đổi bởi một client khác. Bỏ qua cập nhật.")
-                                    continue
+                                    logger.warning(f"  Giao dịch {code} đã bị thay đổi bởi một client khác. Thử lại sau.")
+                                    continue # Thử lại ở lần quét sau
+                            # Không cần else ở đây nữa
+
+                    # Nếu WatchError xảy ra, luồng sẽ tiếp tục ở đây, bỏ qua lần lặp hiện tại và thử lại ở lần quét sau.
+                    # Nếu transaction thành công, luồng sẽ tiếp tục bình thường (không chạy vào WatchError).
 
             if not pending_transactions_found:
                 logger.info("  Không tìm thấy giao dịch pending nào.")
@@ -498,13 +503,14 @@ def get_transaction_status(code):
             if transaction.get('code') == code:
                 return transaction.get('status'), transaction.get('amount'), transaction.get('timestamp'), transaction.get('transaction_id'), transaction.get('description') # Trả về thêm thông tin
         return None, None, None, None, None  # Không tìm thấy
-
-    status = data.get(b'status', b'').decode()
-    amount = data.get(b'amount', b'0').decode()
-    timestamp = data.get(b'timestamp', b'0').decode()
-    transaction_id = data.get(b'transaction_id', b'').decode()
-    description = data.get(b'description', b'').decode() # Lấy description từ pending transaction nếu có
-    return status, amount, timestamp, transaction_id, description
+    else:
+        # Lấy thông tin từ pending_transaction nếu tìm thấy
+        status = data.get(b'status', b'').decode()
+        amount = data.get(b'amount', b'0').decode()
+        timestamp = data.get(b'timestamp', b'0').decode()
+        transaction_id = data.get(b'transaction_id', b'').decode()
+        description = data.get(b'description', b'').decode()
+        return status, amount, timestamp, transaction_id, description
 
 def get_status_message(status):
     if status == 'pending':
