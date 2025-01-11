@@ -254,11 +254,11 @@ def confirm_transaction(transaction_id, amount, description, transaction_time):
         logger.error(f"Lỗi khi gửi request xác nhận giao dịch: {e}")
         # Có thể cập nhật status = failed nếu cần thiết
 
-def generate_qr_image_from_string(qr_content):
-    """Tạo ảnh QR từ chuỗi nội dung."""
+def generate_qr_image_from_string(qr_content, scale=10):
+    """Tạo ảnh QR PNG từ chuỗi nội dung sử dụng segno."""
     try:
         img_io = BytesIO()
-        qr_content.save(img_io, kind='SVG', scale=10)
+        qr_content.save(img_io, kind='png', scale=scale)
         img_io.seek(0)
         return img_io
     except Exception as e:
@@ -315,17 +315,13 @@ def create_transaction():
 
         # Tạo nội dung QR
         qr_pay = QRPay(BANK_CODE, ACCOUNT_NUMBER, transaction_amount=amount, point_of_initiation_method='DYNAMIC', purpose_of_transaction=code)
-        qr_content = qr_pay.generate_qr_code_image(qr_pay.code)
-        
-        # Lấy dữ liệu svg
-        img_io = generate_qr_image_from_string(qr_content)
-        svg_data = img_io.getvalue()
+        qr_content = qr_pay.generate_qr_pay()
 
         # Tạo ảnh QR từ nội dung
         # qr_image = generate_qr_image_from_string(qr_content) # Bạn không cần dùng biến này nữa
 
         # Mã hóa base64
-        qr_code_base64 = base64.b64encode(svg_data).decode('utf-8')
+        qr_code_base64 = base64.b64encode(qr_content).decode('utf-8')
 
         # Tạo JSON response
         response_data = {
