@@ -402,22 +402,23 @@ def check_expired_transactions():
     """Kiểm tra các giao dịch pending đã hết hạn và cập nhật trạng thái."""
     while True:
         try:
-            # Lấy tất cả các key bắt đầu bằng tiền tố pending_transaction:
-            pending_transaction_keys = redis_client.keys(f"{PENDING_TRANSACTION_PREFIX}*")
-            for key in pending_transaction_keys:
-                # Lấy thông tin giao dịch
-                transaction_data = redis_client.hgetall(key)
-                if transaction_data:
-                    status = transaction_data.get(b'status', b'').decode()
-                    expiration_time = int(transaction_data.get(b'timestamp', b'0').decode()) + TRANSACTION_CODE_EXPIRATION
-                    code = key.decode().replace(PENDING_TRANSACTION_PREFIX, "")
-                    # Nếu trạng thái là pending và đã hết hạn
-                    if status == 'pending' and int(time.time()) > expiration_time:
-                        # Cập nhật trạng thái thành expired
-                        redis_client.hset(key, 'status', 'expired')
-                        # Cập nhật lịch sử giao dịch
-                        update_transaction_history(code, 'expired')
-                        logger.info(f"Cập nhật trạng thái giao dịch thành expired: {code}")
+            cursor = '0'  # Bắt đầu từ cursor 0
+            while cursor != 0:
+                cursor, keys = redis_client.scan(cursor=cursor, match=f"{PENDING_TRANSACTION_PREFIX}*", count=100)
+                for key in keys:
+                    # Lấy thông tin giao dịch
+                    transaction_data = redis_client.hgetall(key)
+                    if transaction_data:
+                        status = transaction_data.get(b'status', b'').decode()
+                        expiration_time = int(transaction_data.get(b'timestamp', b'0').decode()) + TRANSACTION_CODE_EXPIRATION
+                        code = key.decode().replace(PENDING_TRANSACTION_PREFIX, "")
+                        # Nếu trạng thái là pending và đã hết hạn
+                        if status == 'pending' and int(time.time()) > expiration_time:
+                            # Cập nhật trạng thái thành expired
+                            redis_client.hset(key, 'status', 'expired')
+                            # Cập nhật lịch sử giao dịch
+                            update_transaction_history(code, 'expired')
+                            logger.info(f"Cập nhật trạng thái giao dịch thành expired: {code}")
         except Exception as e:
             logger.error(f"Lỗi khi kiểm tra giao dịch hết hạn: {e}")
 
