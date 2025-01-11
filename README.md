@@ -111,8 +111,24 @@ Tạo mã giao dịch tạm thời và QR code để nhận tiền.
 *   `amount`: Số tiền cần nhận (không bao gồm dấu chấm, phẩy).
 
 **Response (201 Created):**
-
-Trả về ảnh QR code (SVG).
+```json
+{
+  "status": "success",
+  "transaction_id": "your_unique_transaction_id",
+  "code": "VCD1678886400",
+  "qr_code_data": "<base64_encoded_svg_or_png>",
+  "amount": 100000,
+  "expires_at": 1678886700,
+  "message": ""
+}
+```
+*   `status`: Trạng thái tạo QR code (success hoặc error).
+*   `transaction_id`: ID giao dịch.
+*   `code`: Mã code của giao dịch - cũng là mã truy vấn khi thực hiện request kiểm tra trạng thái
+*   `qr_code_data`: Dữ liệu ảnh QR code (PNG) được mã hóa dưới dạng base64.
+*   `amount`: Số tiền.
+*   `expires_at`: Timestamp (giây) thời điểm hết hạn của mã QR code.
+*   `message`: Thông báo lỗi (nếu có).
 
 **Response (400 Bad Request):**
 
