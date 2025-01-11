@@ -6,6 +6,7 @@ import os
 import requests
 import segno
 import io
+import base64
 from datetime import datetime
 import logging
 from flask import Flask, request, jsonify, send_file
@@ -253,11 +254,11 @@ def confirm_transaction(transaction_id, amount, description, transaction_time):
         logger.error(f"Lỗi khi gửi request xác nhận giao dịch: {e}")
         # Có thể cập nhật status = failed nếu cần thiết
 
-def generate_qr_image_from_string(qr_content):
-    """Tạo ảnh QR từ chuỗi nội dung."""
+def generate_qr_image_from_string(qr_content, scale=10):
+    """Tạo ảnh QR PNG từ chuỗi nội dung sử dụng segno."""
     try:
         img_io = BytesIO()
-        qr_content.save(img_io, kind='SVG', scale=10)
+        qr_content.save(img_io, kind='png', scale=scale)
         img_io.seek(0)
         return img_io
     except Exception as e:
@@ -315,13 +316,24 @@ def create_transaction():
         # Tạo nội dung QR
         qr_pay = QRPay(BANK_CODE, ACCOUNT_NUMBER, transaction_amount=amount, point_of_initiation_method='DYNAMIC', purpose_of_transaction=code)
         qr_content = qr_pay.generate_qr_code_image(qr_pay.code)
-
+        
         # Tạo ảnh QR từ nội dung
-        qr_image = generate_qr_image_from_string(qr_content)
-        if qr_image:
-            return send_file(qr_image, mimetype='image/svg+xml'), 201
-        else:
-            return jsonify({'message': 'Error generating QR code'}), 500
+        qr_image = generate_qr_image_from_string(qr_content) # Bạn không cần dùng biến này nữa
+        # Mã hóa base64
+        qr_code_base64 = base64.b64encode(qr_image.getvalue()).decode('utf-8')
+        
+        # Tạo JSON response
+        response_data = {
+            "status": "success",
+            "transaction_id": transaction_id,
+            "code": code,
+            "qr_code_data": qr_code_base64,
+            "amount": amount,
+            "expires_at": timestamp + TRANSACTION_CODE_EXPIRATION,
+            "message": ""
+        }
+
+        return jsonify(response_data), 201
 
     except Exception as e:
         logger.error(f"Lỗi khi tạo mã giao dịch: {e}")
