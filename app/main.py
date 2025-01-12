@@ -386,6 +386,21 @@ def check_transaction_status():
             'message': get_status_message(status)
         }), 200
 
+@app.route('/healthz')
+def healthz():
+    return jsonify({"status": "ok"}), 200
+
+# Readiness probe endpoint
+@app.route('/readyz')
+def readyz():
+    # Thực hiện kiểm tra xem ứng dụng đã sẵn sàng chưa
+    # Ví dụ: kiểm tra kết nối đến Redis
+    try:
+        redis_client.ping()
+        return jsonify({"status": "ok"}), 200
+    except Exception as e:
+        logger.error(f"Readiness probe failed: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 503
 
 def check_expired_transactions():
     """Kiểm tra các giao dịch pending đã hết hạn và cập nhật trạng thái."""
