@@ -3,3 +3,4 @@ flask==3.1.0
 redis==5.2.1
 napas-qr-python==0.1.2
 segno==1.6.1
+gunicorn==23.0.0
