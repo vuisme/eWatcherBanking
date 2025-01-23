@@ -320,6 +320,43 @@ def create_transaction():
         logger.error(f"Lỗi khi tạo mã giao dịch: {e}")
         return jsonify({'message': 'Error creating transaction', 'error': str(e)}), 500
 
+@app.route('/free_qr_code', methods=['POST'])
+def free_qr_code():
+    """API tạo QR code dựa vào BANK_CODE, ACCOUNT_NUMBER và amount."""
+    headers = request.headers
+    auth_header = headers.get('Authorization')
+    if not auth_header or auth_header != f'Bearer {API_KEY}':
+        return jsonify({'message': 'Unauthorized'}), 401
+    try:
+        data = request.get_json()
+        bank_code = data.get('BANK_CODE')
+        account_number = data.get('ACCOUNT_NUMBER')
+        amount = data.get('amount')
+        
+        if not bank_code or not account_number or not amount:
+            return jsonify({'message': 'Missing BANK_CODE, ACCOUNT_NUMBER or amount'}), 400
+        
+        # Tạo nội dung QR
+        qr_pay = QRPay(bank_code, account_number, transaction_amount=amount, point_of_initiation_method='DYNAMIC')
+        qr_content = qr_pay.generate_qr_code_image(qr_pay.code)
+        
+        # Tạo ảnh QR từ nội dung và mã hóa base64
+        qr_code_base64 = base64.b64encode(generate_qr_image_from_string(qr_content).getvalue()).decode('utf-8')
+        
+        # Tạo JSON response
+        response_data = {
+            "status": "success",
+            "qr_code_data": qr_code_base64,
+            "amount": amount,
+            "message": "QR code generated successfully"
+        }
+        
+        return jsonify(response_data), 200
+
+    except Exception as e:
+        logger.error(f"Lỗi khi tạo QR code: {e}")
+        return jsonify({'message': 'Error generating QR code', 'error': str(e)}), 500
+
 @app.route('/transaction_history', methods=['GET'])
 def get_transaction_history():
     """API endpoint để lấy lịch sử giao dịch."""
