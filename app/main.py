@@ -329,6 +329,7 @@ def free_qr_code():
         return jsonify({'message': 'Unauthorized'}), 401
     try:
         data = request.get_json()
+        logger.info(data)
         bank_code = data.get('BANK_CODE')
         account_number = data.get('ACCOUNT_NUMBER')
         amount = data.get('amount')
@@ -350,7 +351,7 @@ def free_qr_code():
             "amount": amount,
             "message": "QR code generated successfully"
         }
-        
+        logger.info(jsonify(response_data))
         return jsonify(response_data), 200
 
     except Exception as e:
